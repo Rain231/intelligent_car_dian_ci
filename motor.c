@@ -1,305 +1,240 @@
+/*
+ * motor.c
+ *
+ *  Created on: 2021å¹´3æœˆ13æ—¥
+ *      Author: dade
+ */
 /***************************************************************************
-***ÒÔ×î´óÖµ50000µ÷½Úµç»úÕ¼¿Õ±ÈÊ±£¬ÓÒÂÖÒª±È×óÂÖ´ó1000£¬ËÙ¶È²Å²î²»¶àÏàµÈ********
+***ä»¥æœ€å¤§å€¼50000è°ƒèŠ‚ç”µæœºå ç©ºæ¯”æ—¶ï¼Œå³è½®è¦æ¯”å·¦è½®å¤§1000ï¼Œé€Ÿåº¦æ‰å·®ä¸å¤šç›¸ç­‰********
 ***************************************************************************/
 #include "headfile.h"
 #include "steer.h"
-#include "motor.h"
+#define   x FeedBack_L/100
+/********ç”µæœºå’Œç¼–ç å™¨å‚æ•°********/
+//-------è„‰å†²æ»¤æ³¢--------//
+uint16 temp_speed_L[3]={0};//å·¦ç”µæœºè„‰å†²æ»¤æ³¢
+uint16 temp_speed_R[3]={0};//å³ç”µæœºè„‰å†²æ»¤æ³¢
 
-/********µç»úºÍ±àÂëÆ÷²ÎÊı********/
-//-------Âö³åÂË²¨--------//
-
-
-uint16 temp_speed_L[3]={0};//×óµç»úÂö³åÂË²¨
-uint16 temp_speed_R[3]={0};//ÓÒµç»úÂö³åÂË²¨
-
-//-------×óÓÒÂÖPWM--------//
+//-------å·¦å³è½®PWM--------//
 uint32 g_nLeftPWM=0;
 uint32 g_nRighPWM=0;
 
-int CODER = 4096;//¶¨Òå±àÂëÆ÷Îª512Ïß
+int CODER = 4096;//å®šä¹‰ç¼–ç å™¨ä¸º512çº¿
 float Temp_Orr = 0;
 float steer_Angle =0 ;
 int16 a = 0;
-int16 FeedBack_L,FeedBack_R, speed_R,sheding_L ,sheding_R ;//±àÂëÆ÷·´À¡Öµ¡¢ÆÚÍûÖµ
-                                                                //1us·µ»ØÒ»´ÎÖµ£¬360¶È·Ö³É4096·İ£¬ËÙ¶È¼ÆËã£º£¨ÊıÖµ/4096£©*3.14*0.065*1000000£¨m/s)
-int16 left_Speed_last,right_Speed_last, left_Now_Speed,right_Now_Speed;//±àÂëÆ÷·´À¡ÖµÉÏ´ÎÓë±¾´Î
-uint32 Motor_L; //¶¨Òå×óµç»úËÙ¶ÈPWM³õÊ¼Öµ
-uint32 Motor_R;//¶¨ÒåÓÒµç»úËÙ¶ÈPWM³õÊ¼Öµ
-int Hst_speed ;
+int16  speed_R,sheding_L =180,sheding_R =180;//ç¼–ç å™¨åé¦ˆå€¼ã€æœŸæœ›å€¼
+int16 FeedBack_L,FeedBack_R;                                                             //1usè¿”å›ä¸€æ¬¡å€¼ï¼Œ360åº¦åˆ†æˆ4096ä»½ï¼Œé€Ÿåº¦è®¡ç®—ï¼šï¼ˆæ•°å€¼/4096ï¼‰*3.14*0.065*1000000ï¼ˆm/s)
+int16 left_Speed_last,right_Speed_last, left_Now_Speed,right_Now_Speed;//ç¼–ç å™¨åé¦ˆå€¼ä¸Šæ¬¡ä¸æœ¬æ¬¡
 
-float error_L=0,d_error_L=0,dd_error_L=0,D_error_L=0,DD_error_L=0; //×óµç»úÆ«²îÉè¶¨£¬µ±Ç°¡¢ÉÏ´Î£¬ÉÏÉÏ´Î¡¢ÖĞ¼ä±äÁ¿
-float error_R=0,d_error_R=0,dd_error_R=0,D_error_R=0,DD_error_R=0; //ÓÒµç»úÆ«²îÉè¶¨£¬µ±Ç°¡¢ÉÏ´Î£¬ÉÏÉÏ´Î¡¢ÖĞ¼ä±äÁ¿
-
-int H_speed_L ,H_speed_R ,Hst_speed; //¶¨Òåµç»ú×î¸ßËÙ£¬×îµÍËÙ
-
-float cycle=10;                      //¿É¸Ä
-float MotorP =0.23,MotorI =0.32,MotorD =0.07; //¶¨Òåµç»úPID¸³Öµ  0.2  0.31  0.31 // 0.23 0.32 0.07
-//float MotorP =0.5,MotorI =0,MotorD =0; //¶¨Òåµç»úPID¸³Öµ  0.2  0.31  0.31 // 0.23 0.32 0.07
+uint32 Motor_L ; //å®šä¹‰å·¦ç”µæœºé€Ÿåº¦PWMåˆå§‹å€¼
+uint32 Motor_R; //å®šä¹‰å³ç”µæœºé€Ÿåº¦PWMåˆå§‹å€¼
+float error_L=0,d_error_L=0,dd_error_L=0,D_error_L=0,DD_error_L=0; //å·¦ç”µæœºåå·®è®¾å®šï¼Œå½“å‰ã€ä¸Šæ¬¡ï¼Œä¸Šä¸Šæ¬¡ã€ä¸­é—´å˜é‡
+float error_R=0,d_error_R=0,dd_error_R=0,D_error_R=0,DD_error_R=0; //å³ç”µæœºåå·®è®¾å®šï¼Œå½“å‰ã€ä¸Šæ¬¡ï¼Œä¸Šä¸Šæ¬¡ã€ä¸­é—´å˜é‡
+uint8 text[1];
 
 
+
+int H_speed_L ,H_speed_R ,Hst_speed; //å®šä¹‰ç”µæœºæœ€é«˜é€Ÿï¼Œæœ€ä½é€Ÿ
+int Hst_speed=200;
+float cycle=8;                      //å¯æ”¹
+float MotorP =0.2,MotorI =0.31,MotorD =0.4; //å®šä¹‰ç”µæœºPIDèµ‹å€¼  0.2  0.31  0.31 // 0.23 0.32 0.07
+//float MotorP =0.5,MotorI =0,MotorD =0; //å®šä¹‰ç”µæœºPIDèµ‹å€¼  0.2  0.31  0.31 // 0.23 0.32 0.07
+
+
+
+//é€Ÿåº¦æ§åˆ¶
 
 void SpeedControl(void)
+
 {
-  //---ËÙ¶È¼ÇÂ¼
+
+  //---é€Ÿåº¦è®°å½•
   left_Speed_last=FeedBack_L;
   right_Speed_last=FeedBack_R;
-  
-  FeedBack_L = -qtimer_quad_get(QTIMER_1,QTIMER1_TIMER0_C0 ); //ÕâÀïĞèÒª×¢ÒâµÚ¶ş¸ö²ÎÊıÎñ±ØÌîĞ´AÏàÒı½Å
-  FeedBack_R = qtimer_quad_get(QTIMER_1,QTIMER1_TIMER2_C2 ); //»ñÈ¡FTM Õı½»½âÂë µÄÂö³åÊı(¸ºÊı±íÊ¾·´·½Ïò)
-  
-  //---ÏÖÔÚÂö³å¼ÇÂ¼
-  left_Now_Speed =(FeedBack_L+left_Speed_last)>>1;//³ıÒÔ2
+
+  FeedBack_L=-gpt12_get(GPT12_T2); //è¿™é‡Œéœ€è¦æ³¨æ„ç¬¬äºŒä¸ªå‚æ•°åŠ¡å¿…å¡«å†™Aç›¸å¼•è„š
+  FeedBack_R=gpt12_get(GPT12_T2); //è·å–FTM æ­£äº¤è§£ç  çš„è„‰å†²æ•°(è´Ÿæ•°è¡¨ç¤ºåæ–¹å‘)
+  //---ç°åœ¨è„‰å†²è®°å½•
+  left_Now_Speed =(FeedBack_L+left_Speed_last)>>1;
   right_Now_Speed =(FeedBack_R+right_Speed_last)>>1;
-  
-   qtimer_quad_clear(QTIMER_1,QTIMER1_TIMER0_C0 );
-   qtimer_quad_clear(QTIMER_1,QTIMER1_TIMER2_C2 );
-  //speed_filter();       //µç»úÂË²¨
-  
-   
-   Hst_speed =gpio_get(SW1)?220:160;  //¿ª¹Ø
-   
+
+  gpt12_clear(GPT12_T2);
+  gpt12_clear(GPT12_T2);
+  //speed_filter();       //ç”µæœºæ»¤æ³¢
+
+
+   Hst_speed=180; //160
+
   H_speed_L = Hst_speed;
   H_speed_R = Hst_speed;
-  
-  sheding_L = H_speed_L - (int16)(DirectionError_level*DirectionError_level*cycle); //×î¸ßËÙ ¼õÈ¥Æ«²î¶ş´Î·½³ıÒÔÒ»¸öÏµÊı£¬×öÎªµ±Ç°Éè¶¨Öµ 40
-  if (sheding_L <0) sheding_L = 0;//×î¸ßËÙ ¼õÈ¥Æ«²î¶ş´Î·½³ıÒÔÒ»¸öÏµÊı£¬×öÎªµ±Ç°Éè¶¨Öµ
-  sheding_R = H_speed_R - (int16)(DirectionError_level*DirectionError_level*cycle); //×î¸ßËÙ ¼õÈ¥Æ«²î¶ş´Î·½³ıÒÔÒ»¸öÏµÊı£¬×öÎªµ±Ç°Éè¶¨Öµ 40
+
+  sheding_L = H_speed_L - (int16)(DirectionError_level*DirectionError_level*cycle); //æœ€é«˜é€Ÿ å‡å»åå·®äºŒæ¬¡æ–¹é™¤ä»¥ä¸€ä¸ªç³»æ•°ï¼Œåšä¸ºå½“å‰è®¾å®šå€¼ 40
+  if (sheding_L <0) sheding_L = 0;//æœ€é«˜é€Ÿ å‡å»åå·®äºŒæ¬¡æ–¹é™¤ä»¥ä¸€ä¸ªç³»æ•°ï¼Œåšä¸ºå½“å‰è®¾å®šå€¼
+  sheding_R = H_speed_R - (int16)(DirectionError_level*DirectionError_level*cycle); //æœ€é«˜é€Ÿ å‡å»åå·®äºŒæ¬¡æ–¹é™¤ä»¥ä¸€ä¸ªç³»æ•°ï¼Œåšä¸ºå½“å‰è®¾å®šå€¼ 40
   if (sheding_R<0) sheding_R = 0;
-  
+
 #if 1
-//  sheding_L = H_speed_L ;
-//  if (sheding_L <0) sheding_L = 0;//×î¸ßËÙ ¼õÈ¥Æ«²î¶ş´Î·½³ıÒÔÒ»¸öÏµÊı£¬×öÎªµ±Ç°Éè¶¨Öµ
-//  sheding_R = H_speed_R ;
-//  if (sheding_R<0) sheding_R = 0;
-  
-  steer_Angle = steer_mid - Steer_Out ;
-  if(steer_Angle>10) //´òÓÒ
+   //sheding_L = H_speed_L ;
+  //if (sheding_L <0) sheding_L = 0;//æœ€é«˜é€Ÿ å‡å»åå·®äºŒæ¬¡æ–¹é™¤ä»¥ä¸€ä¸ªç³»æ•°ï¼Œåšä¸ºå½“å‰è®¾å®šå€¼
+  //sheding_R = H_speed_R ;
+  //if (sheding_R<0) sheding_R = 0;
+
+  steer_Angle=steer_mid-Steer_Out;
+  if(steer_Angle>80) //æ‰“å³
   {
     a=(int16)(100*(steer_Angle)*1.0/(steer_left - steer_right));  //angle_max   45
-    if(a>45)  a=45;
-    if(a<0)   a=0;//µÚÒ»¸ö³£Êı¿ÉÒÔ¼Ó´ó²îËÙ£¬µÚ¶ş¸ö³£Êı¿ÉÒÔÌáÇ°²îËÙ,µÚÈı¸ö³£Êı¿ÉÒÔ¸Ä±ä×óÓÒÂÖµÄ²îËÙ´óĞ¡²îÖµ
-    Temp_Orr = tan((a*3.14)/180) * 30 / 35;
-    sheding_L = (int16)(1.0 * sheding_L * (1.0 + 2.0 * Temp_Orr)); //ÊÔ³µ³¡µØ²îËÙÏµÊı0.964
-    sheding_R = (int16)(1.0 * sheding_R * (1.0 - 2.0 * Temp_Orr)); 
+  if(a>45)  a=45;
+  if(a<0)   a=0;//ç¬¬ä¸€ä¸ªå¸¸æ•°å¯ä»¥åŠ å¤§å·®é€Ÿï¼Œç¬¬äºŒä¸ªå¸¸æ•°å¯ä»¥æå‰å·®é€Ÿ,ç¬¬ä¸‰ä¸ªå¸¸æ•°å¯ä»¥æ”¹å˜å·¦å³è½®çš„å·®é€Ÿå¤§å°å·®å€¼
+    Temp_Orr = tan((a*3.14)/180) * 30 / 20;
+    sheding_L = (int16)(1.0 * sheding_L * (1.0 +1.0 * Temp_Orr)); //è¯•è½¦åœºåœ°å·®é€Ÿç³»æ•°0.964
+    sheding_R = (int16)(1.0 * sheding_R * (1.0 - 1.0* Temp_Orr));
   }
-  else if(steer_Angle<-10)//´ò×ó
+  else if(steer_Angle<80)//æ‰“å·¦
   {
     a=(int16)(100*(-steer_Angle)*1.0/(steer_left - steer_right)); //angle_max   45
-    if(a>45)  a=45;
-    if(a<0)   a=0;
-    Temp_Orr = tan((a*3.14)/180) * 30 / 35;
-    sheding_L = (int16)(1.0 * sheding_L * (1.0 - 2.0 * Temp_Orr)); //1.1 ²»³¬¹ı1.2 £¬ÓĞµãÆ¯ÒÆ
-    sheding_R = (int16)(1.0 * sheding_R * (1.0 + 2.5 * Temp_Orr));//0.88
+//    if(a>45)  a=45;
+//    if(a<0)   a=0;
+    Temp_Orr = tan((a*3.14)/180) * 30 / 20;
+    sheding_L = (int16)(1.0 * sheding_L * (1.0 - 1.0 * Temp_Orr)); //1.1 ä¸è¶…è¿‡1.2 ï¼Œæœ‰ç‚¹æ¼‚ç§»//
+    sheding_R = (int16)(1.0 * sheding_R * (1.0 +1.1* Temp_Orr));//0.88
   }
 #endif
-  
+
   //speedL1();
  // speedR1();
- // PulseCountMeansure();                              //Âö³åÀÛ¼ÆÇå³ı±êÖ¾Î»
-  
+ // PulseCountMeansure();                              //è„‰å†²ç´¯è®¡æ¸…é™¤æ ‡å¿—ä½
+
 }
 
-/*****µç»úÔöÁ¿Ê½PIDµ÷½Ú1µµ*******/                                                                  //                       µ²Î»Ğè¸Ä
+/*****ç”µæœºå¢é‡å¼PIDè°ƒèŠ‚1æ¡£*******///ä¸è¦é—®æˆ‘ä¸¤æ¡£ä¸ºä»€ä¹ˆä¸å†™åœ¨ä¸€èµ·ï¼Œå› ä¸ºæˆ‘æ‡’ã€‚
 void speedL1(void)
-{   
-  
-  error_L =  sheding_L -FeedBack_L;   //ÆÚÍûËÙ¶ÈÓëµ±Ç°·´À¡ËÙ¶ÈµÄ²îÖµ
-  d_error_L = error_L - D_error_L;        //µ±Ç°ËÙ¶È²îÓëÉÏ´ÎËÙ¶È²îµÄ²îÖµ                              
-  dd_error_L = d_error_L - DD_error_L;    //ÉÏ´ÎËÙ¶È²îÓëÉÏÉÏ´ÎËÙ¶È²îµÄ²îÖµ
+{
+  error_L =  sheding_L -FeedBack_L;   //æœŸæœ›é€Ÿåº¦ä¸å½“å‰åé¦ˆé€Ÿåº¦çš„å·®å€¼
+  d_error_L = error_L - D_error_L;        //å½“å‰é€Ÿåº¦å·®ä¸ä¸Šæ¬¡é€Ÿåº¦å·®çš„å·®å€¼
+  dd_error_L = d_error_L - DD_error_L;    //ä¸Šæ¬¡é€Ÿåº¦å·®ä¸ä¸Šä¸Šæ¬¡é€Ÿåº¦å·®çš„å·®å€¼
   D_error_L = error_L;
   DD_error_L = d_error_L;
-  
-  
-  if((error_L >= 25)||(error_L <= -30)) //°ô°ô¿ØÖÆ£¬ÈôËÙ¶È²îÖµ´óÓÚÒ»¶¨Öµ£¬¼±Ğè¼ÓËÙ»òÕß¼õËÙ£¬ÔòÊÖ¶¯¸ø¶¨×îĞ¡×î´óPWMÖµ
+
+  if((error_L >= 50)||(error_L <= -50)) //æ£’æ£’æ§åˆ¶ï¼Œè‹¥é€Ÿåº¦å·®å€¼å¤§äºä¸€å®šå€¼ï¼Œæ€¥éœ€åŠ é€Ÿæˆ–è€…å‡é€Ÿï¼Œåˆ™æ‰‹åŠ¨ç»™å®šæœ€å°æœ€å¤§PWMå€¼
   {
-    if(error_L >= 25)
-     {
-       if( gpio_get(SW1)==0)
-      {  
-        Motor_L =11000;
-      }
-      else if( gpio_get(SW1)==1)
-      {
-         Motor_L =14000;
-       }
-      
-    } 
-    else if(error_L <= -30)
-   
-      //if( blockprognosis == 1 || blockpavement == 1 )
-      //{
-      //  Motor_L=5; //160
-     // }
-     // else
-     {
-       if( gpio_get(SW1)==0)
-      {  
-        Motor_L =10000;
-      }
-      else if( gpio_get(SW1)==1)
-      {
-         Motor_L =8000;
-       }
-      
-    }  
-    
+    if(error_L >= 40 && cr_flag1==0)
+      Motor_L =12000;
+    else if(error_L <= -40 && cr_flag1==0)
+       Motor_L =8000;
+    else if(error_L >= 40 && cr_flag1==1)
+      Motor_L =9000;
+    else if(error_L <= -40 && cr_flag1==1)
+       Motor_L =8000;
   }
   else
   {
-    Motor_L = gpio_get(SW1)?13000:11000;                                                        //µ²Î»Ğè¸Ä
-    Motor_L = Motor_L + (int16)(MotorP*d_error_L + MotorI*error_L + MotorD*dd_error_L)/10;  //P I D ²ÎÊı¿Éµ÷£¬
-      if( gpio_get(SW1)==0)
-      { 
-        if( Motor_L>11000)
-        Motor_L =11000;
-        else if(Motor_L<=0)  
-        Motor_L = 0; //ÏŞÖÆ×îĞ¡PWMÖµ£¬·ÀÖ¹·è×ª
-      }
-      else if( gpio_get(SW1)==1)
-      {    
-        if( Motor_L>14000)
-        Motor_L =14000;
-        else if(Motor_L<=0)  
-        Motor_L = 0; //ÏŞÖÆ×îĞ¡PWMÖµ£¬·ÀÖ¹·è×ª
-        
-       }
-    
+    Motor_L = Motor_L + (int16)(MotorP*d_error_L + MotorI*error_L + MotorD*dd_error_L)/10;  //P I D å‚æ•°å¯è°ƒï¼Œ
+    if(Motor_L>12000)
+      Motor_L =12000; //é™åˆ¶PWMå€¼ï¼Œé˜²æ­¢è¶Šç•Œ
+    else if(Motor_L<=0)
+      Motor_L = 0; //é™åˆ¶æœ€å°PWMå€¼ï¼Œé˜²æ­¢ç–¯è½¬
   }
-  //return Motor_L; 
+  //return Motor_L;
 }
-/*****µç»ú2ÔöÁ¿Ê½PIDµ÷½Ú*******/
-void speedR1(void)
+
+
+
+
+/*****ç”µæœºå¢é‡å¼PIDè°ƒèŠ‚2æ¡£*******/
+void speedL2(void)
 {
-  error_R =  sheding_R - FeedBack_R;      //ÆÚÍûËÙ¶ÈÓëµ±Ç°·´À¡ËÙ¶ÈµÄ²îÖµ
-  d_error_R = error_R - D_error_R;        //µ±Ç°ËÙ¶È²îÓëÉÏ´ÎËÙ¶È²îµÄ²îÖµ                              
-  dd_error_R = d_error_R - DD_error_R;    //ÉÏ´ÎËÙ¶È²îÓëÉÏÉÏ´ÎËÙ¶È²îµÄ²îÖµ
-  D_error_R = error_R;
-  DD_error_R = d_error_R;
- if((error_R >= 30)||(error_R <= -30)) //°ô°ô¿ØÖÆ£¬ÈôËÙ¶È²îÖµ´óÓÚÒ»¶¨Öµ£¬¼±Ğè¼ÓËÙ»òÕß¼õËÙ£¬ÔòÊÖ¶¯¸ø¶¨×îĞ¡×î´óPWMÖµ
+  error_L =  sheding_L -FeedBack_L;   //æœŸæœ›é€Ÿåº¦ä¸å½“å‰åé¦ˆé€Ÿåº¦çš„å·®å€¼
+  d_error_L = error_L - D_error_L;        //å½“å‰é€Ÿåº¦å·®ä¸ä¸Šæ¬¡é€Ÿåº¦å·®çš„å·®å€¼
+  dd_error_L = d_error_L - DD_error_L;    //ä¸Šæ¬¡é€Ÿåº¦å·®ä¸ä¸Šä¸Šæ¬¡é€Ÿåº¦å·®çš„å·®å€¼
+  D_error_L = error_L;
+  DD_error_L = d_error_L;
+  Motor_L=14000;
+  if((error_L >= 40)||(error_L <= -40)) //æ£’æ£’æ§åˆ¶ï¼Œè‹¥é€Ÿåº¦å·®å€¼å¤§äºä¸€å®šå€¼ï¼Œæ€¥éœ€åŠ é€Ÿæˆ–è€…å‡é€Ÿï¼Œåˆ™æ‰‹åŠ¨ç»™å®šæœ€å°æœ€å¤§PWMå€¼
   {
-    
-     if(error_R >= 30)
-     {
-       if( gpio_get(SW1)==0)
-      {  
-        Motor_R =11000;
-      }
-     
-      else if( gpio_get(SW1)==1)
-      {
-         Motor_R =13000;
-       }
-     }
-    else if(error_R <= -30)
-   
-     // if( blockprognosis == 1 || blockpavement == 1)                                                   µ²Î»Ğè¸Ä
-     // { 
-      //  error_R=5; //160
-      //}
-      //else
-      {
-       if( gpio_get(SW1)==0)
-      {  
-        Motor_R =10000;
-      }
-      else if( gpio_get(SW1)==1)
-      {
-         Motor_R =8000;
-       }
-      
-    }  
-
+    if(error_L >= 40 && cr_flag1==0)
+      Motor_L =14000;
+    else if(error_L <= -40 && cr_flag1==0)
+       Motor_L =8000;
+    else if(error_L >= 40 && cr_flag1==1)
+      Motor_L =10000;
+    else if(error_L <= -40 && cr_flag1==1)
+       Motor_L =8000;
   }
- else 
+  else
   {
-    Motor_R = gpio_get(SW1)?13000:11000;                                                                    //µ²Î»Ğè¸Ä
-    Motor_R = Motor_R + (int16)(MotorP*d_error_R + MotorI*error_R + MotorD*dd_error_R)/10;  //P I D ²ÎÊı¿Éµ÷£¬                           µ²Î»Ğè¸Ä
-    if( gpio_get(SW1)==0)
-      { 
-        if( Motor_R>11000)
-        Motor_R =11000;
-        else if(Motor_R<=0)  
-        Motor_R = 0; //ÏŞÖÆ×îĞ¡PWMÖµ£¬·ÀÖ¹·è×ª
-      }
-      else if( gpio_get(SW1)==1)
-      {    
-        if( Motor_R>14000)
-        Motor_R =14000;
-        else if(Motor_R<=0)  
-        Motor_R = 0; //ÏŞÖÆ×îĞ¡PWMÖµ£¬·ÀÖ¹·è×ª
-        
-       }
-   }
-  //return Motor_R; 
-}
-
-//////////////////
-
-/*
-//µç»ú²îËÙ1µµ
-void chasu1(void)
-{
-  int end =7; //90
-  int B = 1;
-  if(abs(DirectionError_level)>0.17)
-{ 
-    if( DirectionError_level < 0)   //ÓÒ×ª
-  {
-    DirectionError_level = -DirectionError_level;
-    H_speed_L = H_speed_L*(1 + B*(DirectionError_level)/(end));
-    H_speed_R = H_speed_R*(1 -B*(DirectionError_level)/(end));
-  }   
-  else if (DirectionError_level > 0)  //×ó×ª
-  {
-     H_speed_L = (int) (H_speed_L*(1 - B*(DirectionError_level)/(end)));
-     H_speed_R = (int) (H_speed_R*(1+B*(DirectionError_level)/(end)));
+    Motor_L = Motor_L + (int16)(MotorP*d_error_L + MotorI*error_L + MotorD*dd_error_L)/10;  //P I D å‚æ•°å¯è°ƒï¼Œ
+    if(Motor_L>15000)
+      Motor_L =15000; //é™åˆ¶PWMå€¼ï¼Œé˜²æ­¢è¶Šç•Œ
+    else if(Motor_L<=0)
+      Motor_L = 0; //é™åˆ¶æœ€å°PWMå€¼ï¼Œé˜²æ­¢ç–¯è½¬
   }
+  //return Motor_L;
 }
-}
-*/
 
 
 
 /*******************************************************************************
-º¯ÊıÃû³Æ£ºspeed_filter
-º¯Êı¹¦ÄÜ£ºÂö³åÂË²¨º¯Êı
-²ÎÊıËµÃ÷£º
-*******************************************************************************/  
-void speed_filter(void)        //¸Ãº¯Êı×î´óºÄÊ± 11.7us
+å‡½æ•°åç§°ï¼šspeed_filter
+å‡½æ•°åŠŸèƒ½ï¼šè„‰å†²æ»¤æ³¢å‡½æ•°
+å‚æ•°è¯´æ˜ï¼š
+*******************************************************************************/
+void speed_filter(void)        //è¯¥å‡½æ•°æœ€å¤§è€—æ—¶ 11.7us
 {
-  
-  //×óµç»úÂË²¨
-  ///////È¡Ç°ºó²É¼¯µ½µÄÖĞ¼äÖµ
-  temp_speed_L[2]=temp_speed_L[1];     
+
+  //å·¦ç”µæœºæ»¤æ³¢
+  ///////å–å‰åé‡‡é›†åˆ°çš„ä¸­é—´å€¼
+  temp_speed_L[2]=temp_speed_L[1];
   temp_speed_L[1]=temp_speed_L[0];
   temp_speed_L[0]=FeedBack_L;
-  if((temp_speed_L[2]>=temp_speed_L[1]&&temp_speed_L[2]<=temp_speed_L[0])||(temp_speed_L[2]>=temp_speed_L[0]&&temp_speed_L[2]<=temp_speed_L[1])) 
-    FeedBack_L=temp_speed_L[2];   
+  if((temp_speed_L[2]>=temp_speed_L[1]&&temp_speed_L[2]<=temp_speed_L[0])||(temp_speed_L[2]>=temp_speed_L[0]&&temp_speed_L[2]<=temp_speed_L[1]))
+    FeedBack_L=temp_speed_L[2];
   else
-    if((temp_speed_L[1]>=temp_speed_L[2]&&temp_speed_L[1]<=temp_speed_L[0])||(temp_speed_L[1]>=temp_speed_L[0]&&temp_speed_L[1]<=temp_speed_L[2])) 
-      FeedBack_L=temp_speed_L[1]; 
+    if((temp_speed_L[1]>=temp_speed_L[2]&&temp_speed_L[1]<=temp_speed_L[0])||(temp_speed_L[1]>=temp_speed_L[0]&&temp_speed_L[1]<=temp_speed_L[2]))
+      FeedBack_L=temp_speed_L[1];
     else
-      if((temp_speed_L[0]>=temp_speed_L[2]&&temp_speed_L[0]<=temp_speed_L[1])||(temp_speed_L[0]>=temp_speed_L[1]&&temp_speed_L[0]<=temp_speed_L[2])) 
-        FeedBack_L=temp_speed_L[0]; 
-  //ÓÒµç»úÂË²¨
+      if((temp_speed_L[0]>=temp_speed_L[2]&&temp_speed_L[0]<=temp_speed_L[1])||(temp_speed_L[0]>=temp_speed_L[1]&&temp_speed_L[0]<=temp_speed_L[2]))
+        FeedBack_L=temp_speed_L[0];
+  //å³ç”µæœºæ»¤æ³¢
   temp_speed_R[2]=temp_speed_R[1];
   temp_speed_R[1]=temp_speed_R[0];
   temp_speed_R[0]=FeedBack_R;
-  if((temp_speed_R[2]>=temp_speed_R[1]&&temp_speed_R[2]<=temp_speed_R[0])||(temp_speed_R[2]>=temp_speed_R[0]&&temp_speed_R[2]<=temp_speed_R[1])) 
-    FeedBack_R=temp_speed_R[2];   
+  if((temp_speed_R[2]>=temp_speed_R[1]&&temp_speed_R[2]<=temp_speed_R[0])||(temp_speed_R[2]>=temp_speed_R[0]&&temp_speed_R[2]<=temp_speed_R[1]))
+    FeedBack_R=temp_speed_R[2];
   else
-    if((temp_speed_R[1]>=temp_speed_R[2]&&temp_speed_R[1]<=temp_speed_R[0])||(temp_speed_R[1]>=temp_speed_R[0]&&temp_speed_R[1]<=temp_speed_R[2])) 
-      FeedBack_R=temp_speed_R[1]; 
+    if((temp_speed_R[1]>=temp_speed_R[2]&&temp_speed_R[1]<=temp_speed_R[0])||(temp_speed_R[1]>=temp_speed_R[0]&&temp_speed_R[1]<=temp_speed_R[2]))
+      FeedBack_R=temp_speed_R[1];
     else
-      if((temp_speed_R[0]>=temp_speed_R[2]&&temp_speed_R[0]<=temp_speed_R[1])||(temp_speed_R[0]>=temp_speed_R[1]&&temp_speed_R[0]<=temp_speed_R[2])) 
+      if((temp_speed_R[0]>=temp_speed_R[2]&&temp_speed_R[0]<=temp_speed_R[1])||(temp_speed_R[0]>=temp_speed_R[1]&&temp_speed_R[0]<=temp_speed_R[2]))
         FeedBack_R=temp_speed_R[0];
-    
+
 }
 void speed_print()
 {
-               ips200_showstr(150,3,"FB_L_dj");
-         ips200_showstr(250,3,"FB_R_dj");
-
-     ips200_showint16(0,3,FeedBack_L);
-     ips200_showint16(80,3,FeedBack_R);
+     ips200_showint16(0,4,FeedBack_L);
+     ips200_showint16(80,4,FeedBack_R);
 }
+
+
+void dianji()//ä¸Šä½æœºæ˜¾ç¤º
+{
+  uint8 zuo[7]="zuo:";
+  uint8 you[7]="you:";
+  uint8 txee5[3]="   ";
+  zuo[4]=((signed short int) FeedBack_L/100)+48;
+  zuo[5]=(((signed short int)FeedBack_L/10)%10)+48;
+  zuo[6]=((signed short int)FeedBack_L%10)+48;
+  seekfree_wireless_send_buff(zuo,7);
+  seekfree_wireless_send_buff( txee5,3);
+
+
+  you[4]=((signed short int) FeedBack_R/100)+48;
+  you[5]=(((signed short int)FeedBack_R/10)%10)+48;
+  you[6]=((signed short int)FeedBack_R%10)+48;
+  seekfree_wireless_send_buff(you,7);
+seekfree_wireless_send_buff( txee5,2);
+
+}
+
+
+
