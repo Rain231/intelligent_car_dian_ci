@@ -1,7 +1,15 @@
+/*
+ * motor.h
+ *
+ *  Created on: 2021Äê3ÔÂ13ÈÕ
+ *      Author: dade
+ */
+#ifndef CODE_MOTOR_H_
+#define CODE_MOTOR_H_
+#include "include.h"
 
 
-#ifndef _MOTOR_H
-#define _MOTOR_H
+extern int slow_speed;
 
 extern float temp_5;
 extern short int g_nLeftpulse;
@@ -15,31 +23,27 @@ extern float g_fSpeedFilter;
 extern float g_fExpectSpeed;
 extern float fSpeedErrorInteg;
 
-extern float g_speedControl_P;      //å·®é€Ÿæ¯”ä¾‹
-extern float g_speedControl_I;      //ä½ç§»æ¯”ä¾‹
+extern float g_speedControl_P;      //²îËÙ±ÈÀı
+extern float g_speedControl_I;      //Î»ÒÆ±ÈÀı
 extern float g_fExpectSpeed;
-extern int    cr_flag1;//ç¯å²›
-extern void Get_Speed(void);
+extern int    cr_flag1;//»·µº
 extern void SpeedControl(void);
-extern void process_moto_pwm(void);
 
 extern int MOTOR_DEAD_VAL_L;
 extern int MOTOR_DEAD_VAL_R;
 extern void dianji(void);
+extern float  ad[5];
+extern float abs_f(float k);
 
-extern unsigned long int  Motor_L;
-extern unsigned long int  Motor_R;
-extern void speed(void);
-extern void SpeedControl(void);
-extern void speedL1(void);
-extern void speedR1(void);
-extern void speedL2(void);
-extern void speedR2(void);
+extern int8 h;
+extern int32 Motor_L;
+extern void SpeedPID1(void);
+
 extern void speed_filter(void);
-extern void speed_print();
 
-#endif
-
-
+ float ABC(float Date_1,float Date_2,float Date_3,int X);
+ extern int Slow_Speed(void);
 
 
+
+#endif /* CODE_MOTOR_H_ */

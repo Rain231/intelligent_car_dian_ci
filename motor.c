@@ -1,189 +1,131 @@
 /*
  * motor.c
  *
- *  Created on: 2021年3月13日
+ *  Created on: 2021��3��13��
  *      Author: dade
  */
 /***************************************************************************
-***以最大值50000调节电机占空比时，右轮要比左轮大1000，速度才差不多相等********
+***�����ֵ50000���ڵ��ռ�ձ�ʱ������Ҫ�����ִ�1000���ٶȲŲ�����********
 ***************************************************************************/
-#include "headfile.h"
-#include "steer.h"
-#define   x FeedBack_L/100
-/********电机和编码器参数********/
-//-------脉冲滤波--------//
-uint16 temp_speed_L[3]={0};//左电机脉冲滤波
-uint16 temp_speed_R[3]={0};//右电机脉冲滤波
+//#include "headfile.h"
+//#include "steer.h"
+#include "motor.h"
 
-//-------左右轮PWM--------//
-uint32 g_nLeftPWM=0;
-uint32 g_nRighPWM=0;
 
-int CODER = 4096;//定义编码器为512线
-float Temp_Orr = 0;
-float steer_Angle =0 ;
-int16 a = 0;
-int16  speed_R,sheding_L =180,sheding_R =180;//编码器反馈值、期望值
-int16 FeedBack_L,FeedBack_R;                                                             //1us返回一次值，360度分成4096份，速度计算：（数值/4096）*3.14*0.065*1000000（m/s)
-int16 left_Speed_last,right_Speed_last, left_Now_Speed,right_Now_Speed;//编码器反馈值上次与本次
+/********����ͱ���������********/
+//-------�����˲�--------//
+uint16 temp_speed_L[3]={0};//���������˲�
+uint16 temp_speed_R[3]={0};//�ҵ�������˲�
+int8 h;
 
-uint32 Motor_L ; //定义左电机速度PWM初始值
-uint32 Motor_R; //定义右电机速度PWM初始值
-float error_L=0,d_error_L=0,dd_error_L=0,D_error_L=0,DD_error_L=0; //左电机偏差设定，当前、上次，上上次、中间变量
-float error_R=0,d_error_R=0,dd_error_R=0,D_error_R=0,DD_error_R=0; //右电机偏差设定，当前、上次，上上次、中间变量
+int32 FeedBack_L,FeedBack_R;                                                             //1us����һ��ֵ��360�ȷֳ�4096�ݣ��ٶȼ��㣺����ֵ/4096��*3.14*0.065*1000000��m/s)
+
+int32 Motor_L ; //���������ٶ�PWM��ʼֵ
+
 uint8 text[1];
 
+float turn1[4]={3.8,0.001,0, 500};
+float *p1= turn1;
 
-
-int H_speed_L ,H_speed_R ,Hst_speed; //定义电机最高速，最低速
-int Hst_speed=200;
-float cycle=8;                      //可改
-float MotorP =0.2,MotorI =0.31,MotorD =0.4; //定义电机PID赋值  0.2  0.31  0.31 // 0.23 0.32 0.07
-//float MotorP =0.5,MotorI =0,MotorD =0; //定义电机PID赋值  0.2  0.31  0.31 // 0.23 0.32 0.07
-
-
-
-//速度控制
-
-void SpeedControl(void)
-
+//�ٶȿ���
+void SpeedPID1(void)
 {
 
-  //---速度记录
-  left_Speed_last=FeedBack_L;
-  right_Speed_last=FeedBack_R;
+    FeedBack_L=gpt12_get(GPT12_T2); //������Ҫע��ڶ������������дA������
+    gpt12_clear(GPT12_T2);
 
-  FeedBack_L=-gpt12_get(GPT12_T2); //这里需要注意第二个参数务必填写A相引脚
-  FeedBack_R=gpt12_get(GPT12_T2); //获取FTM 正交解码 的脉冲数(负数表示反方向)
-  //---现在脉冲记录
-  left_Now_Speed =(FeedBack_L+left_Speed_last)>>1;
-  right_Now_Speed =(FeedBack_R+right_Speed_last)>>1;
+    Motor_L =  PlacePID_Control(&TurnPID, p1, FeedBack_L, 100);           //λ��ʽpid
 
-  gpt12_clear(GPT12_T2);
-  gpt12_clear(GPT12_T2);
-  //speed_filter();       //电机滤波
+if(tflag==1&&sflag==0)//��һ���ж�����
+{
+
+    Motor_L = 0;
+}else if(oflag==1&&sflag==2&&tflag==1)            //��һ�Σ�������
+    Motor_L = PlacePID_Control(&TurnPID, p1, FeedBack_L, 90);
+else if(tflag==3&&sflag==0&&oflag==2)//�ڶ��ν�
+  Motor_L = 0;
+else if(oflag==3&&sflag==2&&tflag==3)            //�ڶ��ν������־λ
+    Motor_L =PlacePID_Control(&TurnPID, p1, FeedBack_L, 90);
 
 
-   Hst_speed=180; //160
+if(cr_flag1==1&& Flag_Round==0&&(R_huan==1 || L_huan==1))
+{
+    Motor_L =  PlacePID_Control(&TurnPID, p1, FeedBack_L, 70);
+}
+else if(Flag_Round==1)
+{
+    Motor_L =  PlacePID_Control(&TurnPID, p1, FeedBack_L, 90);
+}
+//Slow_Speed();
 
-  H_speed_L = Hst_speed;
-  H_speed_R = Hst_speed;
 
-  sheding_L = H_speed_L - (int16)(DirectionError_level*DirectionError_level*cycle); //最高速 减去偏差二次方除以一个系数，做为当前设定值 40
-  if (sheding_L <0) sheding_L = 0;//最高速 减去偏差二次方除以一个系数，做为当前设定值
-  sheding_R = H_speed_R - (int16)(DirectionError_level*DirectionError_level*cycle); //最高速 减去偏差二次方除以一个系数，做为当前设定值 40
-  if (sheding_R<0) sheding_R = 0;
 
-#if 1
-   //sheding_L = H_speed_L ;
-  //if (sheding_L <0) sheding_L = 0;//最高速 减去偏差二次方除以一个系数，做为当前设定值
-  //sheding_R = H_speed_R ;
-  //if (sheding_R<0) sheding_R = 0;
+    Motor_L =  Slow_Speed();
+        if(Motor_L>3000)
+          Motor_L =3000; //����PWMֵ����ֹԽ��
+        else if(Motor_L<=0)
+          Motor_L = 0; //������СPWMֵ����ֹ��ת
 
-  steer_Angle=steer_mid-Steer_Out;
-  if(steer_Angle>80) //打右
-  {
-    a=(int16)(100*(steer_Angle)*1.0/(steer_left - steer_right));  //angle_max   45
-  if(a>45)  a=45;
-  if(a<0)   a=0;//第一个常数可以加大差速，第二个常数可以提前差速,第三个常数可以改变左右轮的差速大小差值
-    Temp_Orr = tan((a*3.14)/180) * 30 / 20;
-    sheding_L = (int16)(1.0 * sheding_L * (1.0 +1.0 * Temp_Orr)); //试车场地差速系数0.964
-    sheding_R = (int16)(1.0 * sheding_R * (1.0 - 1.0* Temp_Orr));
-  }
-  else if(steer_Angle<80)//打左
-  {
-    a=(int16)(100*(-steer_Angle)*1.0/(steer_left - steer_right)); //angle_max   45
-//    if(a>45)  a=45;
-//    if(a<0)   a=0;
-    Temp_Orr = tan((a*3.14)/180) * 30 / 20;
-    sheding_L = (int16)(1.0 * sheding_L * (1.0 - 1.0 * Temp_Orr)); //1.1 不超过1.2 ，有点漂移//
-    sheding_R = (int16)(1.0 * sheding_R * (1.0 +1.1* Temp_Orr));//0.88
-  }
-#endif
+      h=gpio_get(P33_4);//��λ����
 
-  //speedL1();
- // speedR1();
- // PulseCountMeansure();                              //脉冲累计清除标志位
+      if(h==0)
+        {
+            if(0<=Motor_L) //���1   ��ת ����ռ�ձ�Ϊ �ٷ�֮ (1000/GTM_ATOM0_PWM_DUTY_MAX*100)
+               {
+                   pwm_duty(MOTOR_A, Motor_L);
+                   pwm_duty(MOTOR_B, 0);
+               }
+               else                //���1   ��ת
+               {
+                   pwm_duty(MOTOR_A, 0);
+                   pwm_duty(MOTOR_B, -Motor_L);
+               }
+
+
+        }
+        else
+        {
+
+            pwm_duty(MOTOR_A, 0);
+            pwm_duty(MOTOR_B, 0);
+        }
+
+      ips200_showint16(25,4,FeedBack_L);
+      ips200_showstr(0,4,"v1:");
 
 }
 
-/*****电机增量式PID调节1档*******///不要问我两档为什么不写在一起，因为我懒。
-void speedL1(void)
+void GyroInit(void)
 {
-  error_L =  sheding_L -FeedBack_L;   //期望速度与当前反馈速度的差值
-  d_error_L = error_L - D_error_L;        //当前速度差与上次速度差的差值
-  dd_error_L = d_error_L - DD_error_L;    //上次速度差与上上次速度差的差值
-  D_error_L = error_L;
-  DD_error_L = d_error_L;
-
-  if((error_L >= 50)||(error_L <= -50)) //棒棒控制，若速度差值大于一定值，急需加速或者减速，则手动给定最小最大PWM值
-  {
-    if(error_L >= 40 && cr_flag1==0)
-      Motor_L =12000;
-    else if(error_L <= -40 && cr_flag1==0)
-       Motor_L =8000;
-    else if(error_L >= 40 && cr_flag1==1)
-      Motor_L =9000;
-    else if(error_L <= -40 && cr_flag1==1)
-       Motor_L =8000;
-  }
-  else
-  {
-    Motor_L = Motor_L + (int16)(MotorP*d_error_L + MotorI*error_L + MotorD*dd_error_L)/10;  //P I D 参数可调，
-    if(Motor_L>12000)
-      Motor_L =12000; //限制PWM值，防止越界
-    else if(Motor_L<=0)
-      Motor_L = 0; //限制最小PWM值，防止疯转
-  }
-  //return Motor_L;
+    get_icm20602_accdata_spi();
+    get_icm20602_gyro_spi();
+    /*
+    ips200_showint16(0,IPS_colum+1,icm_gyro_x);                             //��ʾһ��16λ�޷�������
+    ips200_showint16(0,IPS_colum+2,icm_gyro_y);                             //��ʾһ��16λ�޷�������
+    ips200_showint16(0,IPS_colum+3,icm_gyro_z);                             //��ʾһ��16λ�޷�������
+    ips200_showint16(0,IPS_colum+4,icm_acc_x);                             //��ʾһ��16λ�޷�������
+    ips200_showint16(0,IPS_colum+5,icm_acc_y);                             //��ʾһ��16λ�޷�������
+    ips200_showint16(0,IPS_colum+6,icm_acc_z);                             //��ʾһ��16λ�޷�������
+    ips200_showstr(100,IPS_colum+1,"icm_gyro_x");                //��ʾ�ַ���
+    ips200_showstr(100,IPS_colum+2,"icm_gyro_y");                //��ʾ�ַ���
+    ips200_showstr(100,IPS_colum+3,"icm_gyro_z");                //��ʾ�ַ���
+    ips200_showstr(100,IPS_colum+4,"icm_acc_x");                //��ʾ�ַ���
+    ips200_showstr(100,IPS_colum+5,"icm_acc_y");                //��ʾ�ַ���
+    ips200_showstr(100,IPS_colum+6,"icm_acc_z");                //��ʾ�ַ���
+    */
 }
-
-
-
-
-/*****电机增量式PID调节2档*******/
-void speedL2(void)
-{
-  error_L =  sheding_L -FeedBack_L;   //期望速度与当前反馈速度的差值
-  d_error_L = error_L - D_error_L;        //当前速度差与上次速度差的差值
-  dd_error_L = d_error_L - DD_error_L;    //上次速度差与上上次速度差的差值
-  D_error_L = error_L;
-  DD_error_L = d_error_L;
-  Motor_L=14000;
-  if((error_L >= 40)||(error_L <= -40)) //棒棒控制，若速度差值大于一定值，急需加速或者减速，则手动给定最小最大PWM值
-  {
-    if(error_L >= 40 && cr_flag1==0)
-      Motor_L =14000;
-    else if(error_L <= -40 && cr_flag1==0)
-       Motor_L =8000;
-    else if(error_L >= 40 && cr_flag1==1)
-      Motor_L =10000;
-    else if(error_L <= -40 && cr_flag1==1)
-       Motor_L =8000;
-  }
-  else
-  {
-    Motor_L = Motor_L + (int16)(MotorP*d_error_L + MotorI*error_L + MotorD*dd_error_L)/10;  //P I D 参数可调，
-    if(Motor_L>15000)
-      Motor_L =15000; //限制PWM值，防止越界
-    else if(Motor_L<=0)
-      Motor_L = 0; //限制最小PWM值，防止疯转
-  }
-  //return Motor_L;
-}
-
 
 
 /*******************************************************************************
-函数名称：speed_filter
-函数功能：脉冲滤波函数
-参数说明：
+�������ƣ�speed_filter
+�������ܣ������˲�����
+����˵����
 *******************************************************************************/
-void speed_filter(void)        //该函数最大耗时 11.7us
+void speed_filter(void)        //�ú�������ʱ 11.7us
 {
 
-  //左电机滤波
-  ///////取前后采集到的中间值
+  //�����˲�
+  ///////ȡǰ��ɼ������м�ֵ
   temp_speed_L[2]=temp_speed_L[1];
   temp_speed_L[1]=temp_speed_L[0];
   temp_speed_L[0]=FeedBack_L;
@@ -195,7 +137,7 @@ void speed_filter(void)        //该函数最大耗时 11.7us
     else
       if((temp_speed_L[0]>=temp_speed_L[2]&&temp_speed_L[0]<=temp_speed_L[1])||(temp_speed_L[0]>=temp_speed_L[1]&&temp_speed_L[0]<=temp_speed_L[2]))
         FeedBack_L=temp_speed_L[0];
-  //右电机滤波
+  //�ҵ���˲�
   temp_speed_R[2]=temp_speed_R[1];
   temp_speed_R[1]=temp_speed_R[0];
   temp_speed_R[0]=FeedBack_R;
@@ -209,14 +151,8 @@ void speed_filter(void)        //该函数最大耗时 11.7us
         FeedBack_R=temp_speed_R[0];
 
 }
-void speed_print()
-{
-     ips200_showint16(0,4,FeedBack_L);
-     ips200_showint16(80,4,FeedBack_R);
-}
 
-
-void dianji()//上位机显示
+void dianji()//��λ����ʾ
 {
   uint8 zuo[7]="zuo:";
   uint8 you[7]="you:";
@@ -236,5 +172,27 @@ seekfree_wireless_send_buff( txee5,2);
 
 }
 
+float ABC(float Date_1,float Date_2,float Date_3,int X)
+{
+
+    float He = 0;
+    float Result;
+
+    He =Date_1+Date_2;
+    Result = He/Date_3*X;
+    return Result;
+
+}
 
 
+int Slow_Speed(void)
+       {
+
+    float result;
+    result = DirectionError[0]*100;
+           if(result<10.0)
+           {
+                return PlacePID_Control(&TurnPID, p1, FeedBack_L, 100);;
+           }
+
+       }
